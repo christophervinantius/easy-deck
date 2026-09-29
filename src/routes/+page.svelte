@@ -23,7 +23,9 @@
 	let cards = $state([]);
 	let allCards = $state([]);
 	let currentCard = $state(null);
-	let isRevealed = $state(false);
+	let showPronunciation = $state(false);
+	let showTranslation = $state(false);
+	let showTranslationPronunciation = $state(false);
 	let loading = $state(true);
 	let cardAnimClass = $state('card-anim-idle');
 	let isPickingCard = $state(false);
@@ -31,13 +33,17 @@
 	const pickRandomCard = async (list = cards, animate = false) => {
 		if (!list || list.length === 0) {
 			currentCard = null;
-			isRevealed = false;
+			showPronunciation = false;
+			showTranslation = false;
+			showTranslationPronunciation = false;
 			cardAnimClass = 'card-anim-idle';
 			return;
 		}
 		if (list.length === 1) {
 			currentCard = list[0];
-			isRevealed = false;
+			showPronunciation = false;
+			showTranslation = false;
+			showTranslationPronunciation = false;
 			cardAnimClass = 'card-anim-idle';
 			return;
 		}
@@ -58,7 +64,9 @@
 			} while (current && list[randomIndex].id === current.id);
 
 			currentCard = list[randomIndex];
-			isRevealed = false;
+			showPronunciation = false;
+			showTranslation = false;
+			showTranslationPronunciation = false;
 
 			// 3. Position the new card to the right off-screen instantly
 			cardAnimClass = 'card-anim-draw-prepare';
@@ -77,7 +85,9 @@
 			} while (current && list[randomIndex].id === current.id);
 
 			currentCard = list[randomIndex];
-			isRevealed = false;
+			showPronunciation = false;
+			showTranslation = false;
+			showTranslationPronunciation = false;
 			cardAnimClass = 'card-anim-idle';
 		}
 	};
@@ -251,7 +261,9 @@
 				cards = [newCard, ...cards];
 				if (!currentCard) {
 					currentCard = newCard;
-					isRevealed = false;
+					showPronunciation = false;
+					showTranslation = false;
+					showTranslationPronunciation = false;
 				}
 			}
 
@@ -539,72 +551,84 @@
 					</button>
 				</div>
 			{:else if currentCard}
-				<!-- 3D Flip Flashcard container -->
-				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+				<!-- Flashcard container -->
 				<div
-					onclick={() => !isPickingCard && (isRevealed = !isRevealed)}
-					class="flip-card w-full cursor-pointer select-none group {cardAnimClass}"
+					class="flashcard w-full select-none p-6 sm:p-8 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col justify-between {cardAnimClass}"
 				>
-					<div class="flip-card-inner {isRevealed ? 'flipped' : ''}">
-						<!-- Front Face (Original) -->
-						<div
-							class="flip-card-front p-8 bg-white rounded-3xl flex flex-col justify-between border border-transparent transition-all"
-						>
-							<!-- Header inside front card -->
-							<div class="flex items-center justify-between text-xs font-bold text-black/60 mb-2">
-								<span class="truncate max-w-[180px]">{currentCard.deck_title || currentDeck?.title || 'Deck'}</span>
-								<span>Original</span>
-							</div>
+					<!-- Header inside card -->
+					<div class="flex items-center justify-between text-xs font-bold text-black/60 mb-2">
+						<span class="truncate max-w-[180px]">{currentCard.deck_title || currentDeck?.title || 'Deck'}</span>
+					</div>
 
-							<!-- Center Content -->
-							<div class="py-6 flex flex-col items-center justify-center text-center">
-								<div class="flex flex-col items-center gap-2">
-									<h2 class="text-3xl sm:text-4xl font-extrabold text-black">
-										{currentCard.original_word}
-									</h2>
-									{#if currentCard.pronunciation}
-										<p class="text-black text-base bg-gray-100 px-3 py-1 rounded-md">
-											{currentCard.pronunciation}
-										</p>
-									{/if}
-								</div>
-							</div>
-
-							<!-- Bottom hint -->
-							<div class="text-center text-sm font-medium text-black/70">
-								Tap to flip
-							</div>
+					<!-- Center Content -->
+					<div class="py-3 flex flex-col items-center justify-center text-center gap-4 w-full">
+						<!-- Original Word (Always shown) -->
+						<div class="flex flex-col items-center gap-1 w-full">
+							<h2 class="text-3xl sm:text-4xl font-regular text-black tracking-tight break-words">
+								{currentCard.original_word}
+							</h2>
 						</div>
 
-						<!-- Back Face (Translation) -->
-						<div
-							class="flip-card-back p-8 bg-emerald-50 border border-emerald-200/70 rounded-3xl flex flex-col justify-between transition-all"
+						<!-- Pronunciation Section (Separately toggleable) -->
+						{#if currentCard.pronunciation}
+							<button
+								type="button"
+								onclick={() => (showPronunciation = !showPronunciation)}
+								class="group/pron cursor-pointer transition-all active:scale-95 focus:outline-none rounded-xl"
+								title={showPronunciation ? 'Click to hide pronunciation' : 'Click to show pronunciation'}
+							>
+								{#if showPronunciation}
+									<div class="flex items-center gap-2 bg-blue-50/90 border border-blue-200/80 text-blue-900 px-4 py-1.5 rounded-xl hover:bg-blue-100/90 transition-colors animate-fadeIn shadow-xs">
+										<span class="text-sm sm:text-base font-regular">{currentCard.pronunciation}</span>
+										<span class="text-[10px] text-blue-500/80 font-medium ml-1">✕</span>
+									</div>
+								{:else}
+									<div class="flex items-center gap-2 bg-gray-50 border border-gray-300 text-gray-500 px-3.5 py-1.5 rounded-xl hover:bg-gray-100 hover:text-gray-700 hover:border-gray-400 transition-all text-xs font-semibold">
+										<span>Show pronunciation</span>
+									</div>
+								{/if}
+							</button>
+						{/if}
+
+						<!-- Translation Section (Separately toggleable) -->
+						<button
+							type="button"
+							onclick={() => (showTranslation = !showTranslation)}
+							class="group/trans cursor-pointer transition-all active:scale-95 focus:outline-none rounded-xl"
+							title={showTranslation ? 'Click to hide translation' : 'Click to show translation'}
 						>
-							<!-- Header inside back card -->
-							<div class="flex items-center justify-between text-xs font-bold text-emerald-800/70 mb-2">
-								<span class="truncate max-w-[180px]">{currentCard.deck_title || currentDeck?.title || 'Deck'}</span>
-								<span class="text-emerald-900 font-extrabold">Translation</span>
-							</div>
-
-							<!-- Center Content -->
-							<div class="py-6 flex flex-col items-center justify-center text-center">
-								<div class="flex flex-col items-center gap-2">
-									<h2 class="text-3xl sm:text-4xl font-extrabold text-emerald-950">
-										{currentCard.translation}
-									</h2>
-									{#if currentCard.translation_pronunciation}
-										<p class="text-emerald-900 text-base bg-emerald-200/60 font-semibold px-3 py-1 rounded-md">
-											{currentCard.translation_pronunciation}
-										</p>
-									{/if}
+							{#if showTranslation}
+								<div class="flex items-center gap-2 bg-blue-50/90 border border-blue-200/80 text-blue-900 px-4 py-1.5 rounded-xl hover:bg-blue-100/90 transition-colors animate-fadeIn shadow-xs">
+									<span class="text-sm sm:text-base font-regular">{currentCard.translation}</span>
+									<span class="text-[10px] text-blue-500/80 font-medium ml-1">✕</span>
 								</div>
-							</div>
+							{:else}
+								<div class="flex items-center gap-2 bg-gray-50 border border-gray-300 text-gray-500 px-3.5 py-1.5 rounded-xl hover:bg-gray-100 hover:text-gray-700 hover:border-gray-400 transition-all text-xs font-semibold">
+									<span>Show translation</span>
+								</div>
+							{/if}
+						</button>
 
-							<!-- Bottom hint -->
-							<div class="text-center text-sm font-medium text-emerald-800/70">
-								Tap to flip back
-							</div>
-						</div>
+						<!-- Translation Pronunciation Section (Separately toggleable) -->
+						{#if currentCard.translation_pronunciation}
+							<button
+								type="button"
+								onclick={() => (showTranslationPronunciation = !showTranslationPronunciation)}
+								class="group/trans-pron cursor-pointer transition-all active:scale-95 focus:outline-none rounded-xl"
+								title={showTranslationPronunciation ? 'Click to hide translation pronunciation' : 'Click to show translation pronunciation'}
+							>
+								{#if showTranslationPronunciation}
+									<div class="flex items-center gap-2 bg-blue-50/90 border border-blue-200/80 text-blue-900 px-4 py-1.5 rounded-xl hover:bg-blue-100/90 transition-colors animate-fadeIn shadow-xs">
+										<span class="text-sm sm:text-base font-regular">{currentCard.translation_pronunciation}</span>
+										<span class="text-[10px] text-blue-500/80 font-medium ml-1">✕</span>
+									</div>
+								{:else}
+									<div class="flex items-center gap-2 bg-gray-50 border border-gray-300 text-gray-500 px-3.5 py-1.5 rounded-xl hover:bg-gray-100 hover:text-gray-700 hover:border-gray-400 transition-all text-xs font-semibold">
+										<span>Show translation pronunciation</span>
+									</div>
+								{/if}
+							</button>
+						{/if}
 					</div>
 				</div>
 
@@ -742,8 +766,7 @@
 </div>
 
 <style>
-	.flip-card {
-		perspective: 1000px;
+	.flashcard {
 		will-change: transform, opacity;
 	}
 
@@ -767,30 +790,18 @@
 		transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.2, 1), opacity 0.24s ease-out;
 	}
 
-	.flip-card-inner {
-		position: relative;
-		width: 100%;
-		height: 100%;
-		transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-		transform-style: preserve-3d;
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
-	.flip-card-inner.flipped {
-		transform: rotateY(180deg);
-	}
-
-	.flip-card-front,
-	.flip-card-back {
-		width: 100%;
-		min-height: 16rem;
-		-webkit-backface-visibility: hidden;
-		backface-visibility: hidden;
-		border-radius: 1.5rem;
-	}
-
-	.flip-card-back {
-		position: absolute;
-		inset: 0;
-		transform: rotateY(180deg);
+	.animate-fadeIn {
+		animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 	}
 </style>
