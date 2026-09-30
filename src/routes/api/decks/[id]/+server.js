@@ -46,12 +46,16 @@ export async function PUT({ params, request, locals }) {
 		await ensureAuthSchema();
 		const { id } = params;
 		const body = await request.json();
-		const { title } = body;
+		const title = body.title?.trim();
+
+		if (!title) {
+			return json({ error: 'Deck title is required' }, { status: 400 });
+		}
 
 		const result = await sql`
 			UPDATE decks
 			SET
-				title = COALESCE(${title || null}, title)
+				title = ${title}
 			WHERE id::text = ${id}
 			  AND user_id::text = ${String(locals.user.id)}
 			  AND deleted_at IS NULL
@@ -62,14 +66,21 @@ export async function PUT({ params, request, locals }) {
 			return json({ error: 'Deck not found' }, { status: 404 });
 		}
 
-		return json(result[0]);
+		// Also get the card count to return a full deck object
+		const countResult = await sql`
+			SELECT COUNT(c.id)::int AS card_count
+			FROM cards c
+			WHERE c.deck_id::text = ${id}
+		`;
+
+		return json({ ...result[0], card_count: countResult[0]?.card_count ?? 0 });
 	} catch (error) {
 		console.error('Error updating deck:', error);
 		return json({ error: error.message || 'Failed to update deck' }, { status: 500 });
 	}
 }
 
-// DELETE /api/decks/[id] - Soft delete a deck
+// DELETE /api/decks/[id] - Soft delete a deck and its cards
 export async function DELETE({ params, locals }) {
 	if (!locals.user) {
 		return json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
@@ -91,6 +102,12 @@ export async function DELETE({ params, locals }) {
 		if (result.length === 0) {
 			return json({ error: 'Deck not found' }, { status: 404 });
 		}
+
+		// Delete cards belonging to this deck
+		await sql`
+			DELETE FROM cards
+			WHERE deck_id::text = ${id}
+		`;
 
 		return json({ success: true, id: result[0].id });
 	} catch (error) {

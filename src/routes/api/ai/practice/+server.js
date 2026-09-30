@@ -106,8 +106,8 @@ export async function POST({ request, locals }) {
 			return json({ error: 'deck_id is required' }, { status: 400 });
 		}
 
-		// Clamp sentence count between 10 and 50
-		const count = Math.min(50, Math.max(10, parseInt(sentence_count, 10) || 10));
+		// Clamp sentence count between 5 and 50
+		const count = Math.min(50, Math.max(5, parseInt(sentence_count, 10) || 5));
 
 		// Verify deck ownership and fetch cards
 		const deck = await sql`
@@ -137,8 +137,18 @@ export async function POST({ request, locals }) {
 			);
 		}
 
-		// Format vocabulary list for Gemini
-		const vocabList = cards
+		// Prepare vocabulary list for Gemini (if more than 50 cards, shuffle and pick up to 50 to keep prompt responsive)
+		let poolCards = [...cards];
+		// Randomize order so different words are highlighted across sessions
+		for (let i = poolCards.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[poolCards[i], poolCards[j]] = [poolCards[j], poolCards[i]];
+		}
+		if (poolCards.length > 50) {
+			poolCards = poolCards.slice(0, 50);
+		}
+
+		const vocabList = poolCards
 			.map(
 				(c) =>
 					`- "${c.original_word}" (meaning: "${c.translation}"${c.pronunciation ? `, pronunciation: "${c.pronunciation}"` : ''})`
@@ -147,23 +157,24 @@ export async function POST({ request, locals }) {
 
 		const prompt = `
 You are an expert language teacher and curriculum designer.
-A student wants to practice the vocabulary words/phrases from their deck titled "${deck.title}".
+A student wants to practice vocabulary words/phrases from their deck titled "${deck.title}".
 
-Here is the complete list of target words/phrases from the deck:
+Here is a list of target words/phrases from the deck:
 ${vocabList}
 
 TASK:
-Generate an array of EXACTLY ${count} natural, varied practice sentences.
+Generate an array of EXACTLY ${count} natural, engaging practice sentences using words from the list above.
 
 STRICT QUANTITY REQUIREMENT:
 - You MUST generate EXACTLY ${count} items.
 - Include an "index" field on each item from 1 up to ${count}.
-- DO NOT stop early. Even if all vocabulary words are covered before reaching ${count}, you MUST continue generating additional sentences until the array contains EXACTLY ${count} items.
+- DO NOT stop early. Continue generating sentences until the array contains EXACTLY ${count} items.
 
 CONTENT REQUIREMENTS:
-1. Every single word/phrase in the provided vocabulary list MUST appear in at least one sentence across the ${count} sentences.
-   - You can naturally combine multiple vocabulary words in the same sentence.
-   - The sentence should feel authentic and contextual in the target language (the language of the original words).
+1. Select and feature vocabulary words/phrases from the provided list in the practice sentences.
+   - NOTE: You DO NOT need to include all words from the vocabulary list. Not all words are required to appear.
+   - Each sentence should naturally incorporate one or more words from the vocabulary list.
+   - Do NOT force unnatural or awkward combinations. Sentences should feel authentic, conversational, and contextually rich in the target language (the language of the original words).
 2. For each sentence, provide:
    - "index": Number from 1 to ${count}
    - "sentence": The full natural sentence in the target language.
@@ -274,7 +285,7 @@ Deck vocabulary:
 ${vocabList}
 
 TASK:
-Generate EXACTLY ${missing} additional practice sentences using vocabulary from the list above.
+Generate EXACTLY ${missing} additional practice sentences using words from the list above. Not all words need to be used.
 Return ONLY a valid JSON array of ${missing} objects with no markdown wrapping:
 [
   {

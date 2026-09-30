@@ -16,25 +16,25 @@ export async function GET({ url, locals }) {
 		if (deckId) {
 			cards = await sql`
 				SELECT 
-					c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id,
+					c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id, c.created_at,
 					d.title as deck_title
 				FROM cards c
 				JOIN decks d ON c.deck_id = d.id
 				WHERE c.deck_id::text = ${deckId}
 				  AND d.user_id::text = ${String(locals.user.id)}
 				  AND d.deleted_at IS NULL
-				ORDER BY c.id DESC
+				ORDER BY c.created_at DESC, c.id DESC
 			`;
 		} else {
 			cards = await sql`
 				SELECT 
-					c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id,
+					c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id, c.created_at,
 					d.title as deck_title
 				FROM cards c
 				JOIN decks d ON c.deck_id = d.id
 				WHERE d.user_id::text = ${String(locals.user.id)}
 				  AND d.deleted_at IS NULL
-				ORDER BY LOWER(d.title) ASC, c.id DESC
+				ORDER BY c.created_at DESC, c.id DESC
 			`;
 		}
 
@@ -144,7 +144,7 @@ export async function POST({ request, locals }) {
 		// Fetch the inserted card joined with deck info
 		const cardWithDeck = await sql`
 			SELECT 
-				c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id,
+				c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id, c.created_at,
 				d.title as deck_title
 			FROM cards c
 			JOIN decks d ON c.deck_id = d.id

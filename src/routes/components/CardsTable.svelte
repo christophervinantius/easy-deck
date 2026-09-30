@@ -1,7 +1,6 @@
 <script>
-	let { cards = [], onEdit, onDelete, onAddCard } = $props();
+	let { cards = [], selectedDeck = null, onEdit, onDelete, onAddCard } = $props();
 
-	let deckFilter = $state('');
 	let wordFilter = $state('');
 	let pronunciationFilter = $state('');
 	let translationFilter = $state('');
@@ -11,9 +10,16 @@
 	let currentPage = $state(1);
 	const pageSizeOptions = [10, 25, 50, 100];
 
+	let lastDeckId = $state(selectedDeck?.id);
+	$effect(() => {
+		if (selectedDeck?.id !== lastDeckId) {
+			lastDeckId = selectedDeck?.id;
+			clearAllFilters();
+		}
+	});
+
 	let hasActiveFilters = $derived(
 		Boolean(
-			deckFilter.trim() ||
 			wordFilter.trim() ||
 			pronunciationFilter.trim() ||
 			translationFilter.trim() ||
@@ -22,7 +28,6 @@
 	);
 
 	const clearAllFilters = () => {
-		deckFilter = '';
 		wordFilter = '';
 		pronunciationFilter = '';
 		translationFilter = '';
@@ -32,18 +37,14 @@
 
 	let sortedCards = $derived(
 		[...cards].sort((a, b) => {
-			const deckA = (a.deck_title || '').toLowerCase();
-			const deckB = (b.deck_title || '').toLowerCase();
-			if (deckA !== deckB) return deckA.localeCompare(deckB);
-			return (a.original_word || '').toLowerCase().localeCompare((b.original_word || '').toLowerCase());
+			const timeA = a.created_at ? new Date(a.created_at).getTime() : (Number(a.id) || 0);
+			const timeB = b.created_at ? new Date(b.created_at).getTime() : (Number(b.id) || 0);
+			return timeB - timeA;
 		})
 	);
 
 	let filteredCards = $derived(
 		sortedCards.filter((card) => {
-			if (deckFilter.trim() && !(card.deck_title || '').toLowerCase().includes(deckFilter.toLowerCase().trim())) {
-				return false;
-			}
 			if (wordFilter.trim() && !(card.original_word || '').toLowerCase().includes(wordFilter.toLowerCase().trim())) {
 				return false;
 			}
@@ -88,6 +89,20 @@
 
 	let startIndex = $derived(filteredCards.length === 0 ? 0 : (currentPage - 1) * pageSize + 1);
 	let endIndex = $derived(Math.min(currentPage * pageSize, filteredCards.length));
+
+	const formatDate = (dateStr) => {
+		if (!dateStr) return '-';
+		try {
+			const d = new Date(dateStr);
+			return d.toLocaleDateString(undefined, {
+				year: 'numeric',
+				month: 'short',
+				day: 'numeric'
+			});
+		} catch {
+			return '-';
+		}
+	};
 </script>
 
 <div class="w-full max-w-5xl flex flex-col gap-6">
@@ -98,25 +113,16 @@
 					<thead>
 						<!-- Column Header Titles -->
 						<tr class="bg-white text-sm font-bold text-black border-b border-gray-100">
-							<th class="p-3">Deck</th>
 							<th class="p-3">Original Word</th>
 							<th class="p-3">Pronunciation</th>
 							<th class="p-3">Translation</th>
 							<th class="p-3">Translation Pronunciation</th>
+							<th class="p-3">Created Date</th>
 							<th class="p-3 text-center">Action</th>
 						</tr>
 
 						<!-- Per-Column Filter Search Inputs -->
 						<tr class="bg-gray-50/80 border-b border-gray-200">
-							<th class="p-2">
-								<input
-									type="text"
-									bind:value={deckFilter}
-									oninput={() => (currentPage = 1)}
-									placeholder="Search deck..."
-									class="w-full text-xs font-normal px-2.5 py-1.5 border border-gray-300 rounded-lg bg-white text-black placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-black"
-								/>
-							</th>
 							<th class="p-2">
 								<input
 									type="text"
@@ -153,6 +159,7 @@
 									class="w-full text-xs font-normal px-2.5 py-1.5 border border-gray-300 rounded-lg bg-white text-black placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-black"
 								/>
 							</th>
+							<th class="p-2"></th>
 							<th class="p-2 text-center">
 								{#if hasActiveFilters}
 									<button
@@ -171,9 +178,6 @@
 						{#if paginatedCards.length > 0}
 							{#each paginatedCards as card (card.id)}
 								<tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-									<td class="p-3 font-semibold text-black">
-										{card.deck_title || 'Default'}
-									</td>
 									<td class="p-3 font-semibold text-black max-w-xs">
 										{card.original_word}
 									</td>
@@ -185,6 +189,9 @@
 									</td>
 									<td class="p-3 font-semibold text-black">
 										{card.translation_pronunciation ? `${card.translation_pronunciation}` : ''}
+									</td>
+									<td class="p-3 font-medium text-black/70">
+										{formatDate(card.created_at)}
 									</td>
 									<td class="p-3 text-center">
 										<div class="flex items-center justify-center gap-3">
@@ -264,8 +271,14 @@
 		</div>
 	{:else}
 		<div class="bg-white rounded-2xl p-12 text-center flex flex-col items-center gap-3">
-			<h3 class="text-lg font-bold text-black">No cards created yet</h3>
-			<p class="text-sm text-black/70">Create a card to start building your flashcard collection.</p>
+			<h3 class="text-lg font-bold text-black">
+				{selectedDeck ? `No cards in "${selectedDeck.title}" yet` : 'No cards created yet'}
+			</h3>
+			<p class="text-sm text-black/70">
+				{selectedDeck
+					? `Create a card in "${selectedDeck.title}" to start building your flashcard collection.`
+					: 'Create a card to start building your flashcard collection.'}
+			</p>
 			{#if onAddCard}
 				<button
 					onclick={onAddCard}

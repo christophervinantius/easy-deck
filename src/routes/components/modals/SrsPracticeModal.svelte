@@ -1,18 +1,16 @@
 <script>
 	let { currentDeck = null, cardCount = 0, onStart, onCancel } = $props();
 
-	// Default sentence count: at least 10, or up to cardCount, capped at 50
-	let sentenceCount = $state(Math.min(50, Math.max(10, Math.min(20, cardCount || 10))));
+	// Default sentence count: at least 5, up to 50
+	let sentenceCount = $state(Math.min(50, Math.max(5, Math.min(10, cardCount || 5))));
 	let loading = $state(false);
 	let error = $state('');
-
-	const quickCounts = [10, 15, 25, 50];
 
 	const handleStart = async (e) => {
 		e.preventDefault();
 		if (loading) return;
 
-		const count = Math.min(50, Math.max(10, Number(sentenceCount) || 10));
+		const count = Math.min(50, Math.max(5, Number(sentenceCount) || 5));
 		loading = true;
 		error = '';
 
@@ -75,7 +73,7 @@
 				<input
 					id="sentence_slider"
 					type="range"
-					min="10"
+					min="5"
 					max="50"
 					step="1"
 					disabled={loading}

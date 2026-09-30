@@ -4,9 +4,12 @@
 	import AddModal from './components/modals/AddModal.svelte';
 	import DuplicateModal from './components/modals/DuplicateModal.svelte';
 	import AddDeckModal from './components/modals/AddDeckModal.svelte';
+	import EditDeckModal from './components/modals/EditDeckModal.svelte';
+	import DeleteDeckModal from './components/modals/DeleteDeckModal.svelte';
 	import EditModal from './components/modals/EditModal.svelte';
 	import DeleteModal from './components/modals/DeleteModal.svelte';
 	import CardsTable from './components/CardsTable.svelte';
+	import DecksTable from './components/DecksTable.svelte';
 	import SrsPracticeModal from './components/modals/SrsPracticeModal.svelte';
 
 	let { data } = $props();
@@ -16,13 +19,22 @@
 	let showDeckModal = $state(false);
 	let cardToEdit = $state(null);
 	let cardToDelete = $state(null);
-	let currentView = $state('deck'); // 'deck' | 'table'
+	let deckToEdit = $state(null);
+	let deckToDelete = $state(null);
+	let currentView = $state('deck'); // 'deck' | 'decks' | 'table'
 	let mobileMenuOpen = $state(false);
 
 	let decks = $state([]);
 	let currentDeck = $state(null);
 	let cards = $state([]);
 	let allCards = $state([]);
+	let currentDeckCards = $derived(
+		currentDeck
+			? (allCards.length > 0
+				? allCards.filter((c) => c.deck_id === currentDeck.id)
+				: cards.filter((c) => c.deck_id === currentDeck.id || !c.deck_id))
+			: allCards
+	);
 	let currentCard = $state(null);
 	let showPronunciation = $state(false);
 	let showTranslation = $state(false);
@@ -134,8 +146,8 @@
 			const res = await fetch('/api/decks');
 			if (res.ok) {
 				const fetchedDecks = await res.json();
-				decks = (fetchedDecks || []).sort((a, b) =>
-					(a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' })
+				decks = (fetchedDecks || []).sort(
+					(a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
 				);
 				if (decks.length > 0) {
 					if (!currentDeck || !decks.some((d) => d.id === currentDeck.id)) {
@@ -346,8 +358,8 @@
 				throw new Error(err.error || 'Failed to create deck');
 			}
 			const newDeck = await res.json();
-			decks = [...decks, newDeck].sort((a, b) =>
-				(a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' })
+			decks = [...decks, newDeck].sort(
+				(a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
 			);
 			currentDeck = newDeck;
 			showDeckModal = false;
@@ -465,6 +477,87 @@
 			throw error;
 		}
 	};
+
+	const handleUpdateDeck = async (deckId, formData) => {
+		try {
+			const response = await fetch(`/api/decks/${deckId}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(formData)
+			});
+
+			if (!response.ok) {
+				const errData = await response.json().catch(() => ({}));
+				throw new Error(errData.error || 'Failed to update deck');
+			}
+
+			const updatedDeck = await response.json();
+			decks = decks
+				.map((d) => (d.id === deckId ? { ...d, ...updatedDeck } : d))
+				.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+			if (currentDeck?.id === deckId) {
+				currentDeck = { ...currentDeck, ...updatedDeck };
+			}
+
+			// Keep deck title in sync across cards
+			allCards = allCards.map((c) =>
+				c.deck_id === deckId ? { ...c, deck_title: updatedDeck.title } : c
+			);
+			cards = cards.map((c) =>
+				c.deck_id === deckId ? { ...c, deck_title: updatedDeck.title } : c
+			);
+			if (currentCard?.deck_id === deckId) {
+				currentCard = { ...currentCard, deck_title: updatedDeck.title };
+			}
+
+			deckToEdit = null;
+			showToast(`Deck "${updatedDeck.title}" updated successfully!`, 'success');
+		} catch (error) {
+			console.error('Error updating deck:', error);
+			showToast(error.message || 'Failed to update deck', 'error');
+			throw error;
+		}
+	};
+
+	const handleDeleteDeck = async (deckId) => {
+		const targetDeck = decks.find((d) => d.id === deckId);
+		const deckTitle = targetDeck?.title ? `"${targetDeck.title}"` : 'Deck';
+
+		try {
+			const response = await fetch(`/api/decks/${deckId}`, {
+				method: 'DELETE'
+			});
+
+			if (!response.ok) {
+				const errData = await response.json().catch(() => ({}));
+				throw new Error(errData.error || 'Failed to delete deck');
+			}
+
+			const remainingDecks = decks.filter((d) => d.id !== deckId);
+			decks = remainingDecks;
+
+			// Remove cards belonging to this deck from local state
+			allCards = allCards.filter((c) => c.deck_id !== deckId);
+			cards = cards.filter((c) => c.deck_id !== deckId);
+
+			if (currentDeck?.id === deckId) {
+				currentDeck = remainingDecks.length > 0 ? remainingDecks[0] : null;
+				fetchCards(currentDeck?.id);
+			} else if (currentCard && !cards.some((c) => c.id === currentCard.id)) {
+				pickRandomCard(cards);
+			}
+
+			deckToDelete = null;
+			showToast(`${deckTitle} deleted successfully!`, 'success');
+		} catch (error) {
+			console.error('Error deleting deck:', error);
+			showToast(error.message || 'Failed to delete deck', 'error');
+			throw error;
+		}
+	};
 </script>
 
 <div class="min-h-screen bg-yellow-200 flex flex-col items-center p-6 sm:p-10 relative">
@@ -514,6 +607,17 @@
 						Home
 					</button>
 					{#if data.user}
+						<button
+							onclick={() => {
+								currentView = 'decks';
+								fetchDecks();
+							}}
+							class="text-base font-semibold cursor-pointer text-black {currentView === 'decks'
+								? 'underline underline-offset-4 decoration-2'
+								: ''}"
+						>
+							My Decks
+						</button>
 						<button
 							onclick={() => {
 								currentView = 'table';
@@ -583,42 +687,57 @@
 
 		<!-- Mobile Dropdown Menu -->
 		{#if mobileMenuOpen}
-			<div class="md:hidden mt-3 p-4 bg-white rounded-2xl border border-black/10 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
-				<!-- Section 1: Home & My Cards -->
-				<nav class="flex items-center gap-4">
+			<div class="md:hidden mt-3 p-4 bg-white rounded-2xl border border-black/10 flex flex-col gap-3 shadow-lg animate-in fade-in slide-in-from-top-2 duration-150">
+				<!-- Section 1: Navigation Links -->
+				<nav class="flex flex-col gap-1 w-full">
 					<button
 						onclick={() => {
 							currentView = 'deck';
 							mobileMenuOpen = false;
 							exitPractice();
 						}}
-						class="text-base font-semibold cursor-pointer text-black {currentView === 'deck'
-							? 'underline underline-offset-4 decoration-2'
-							: ''}"
+						class="text-left text-base font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer text-black {currentView === 'deck'
+							? 'bg-black/5 font-bold underline underline-offset-4 decoration-2'
+							: 'hover:bg-black/5'}"
 					>
 						Home
 					</button>
 					{#if data.user}
 						<button
 							onclick={() => {
+								currentView = 'decks';
+								fetchDecks();
+								mobileMenuOpen = false;
+							}}
+							class="text-left text-base font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer text-black {currentView === 'decks'
+								? 'bg-black/5 font-bold underline underline-offset-4 decoration-2'
+								: 'hover:bg-black/5'}"
+						>
+							My Decks
+						</button>
+						<button
+							onclick={() => {
 								currentView = 'table';
 								fetchAllCards();
 								mobileMenuOpen = false;
 							}}
-							class="text-base font-semibold cursor-pointer text-black {currentView === 'table'
-								? 'underline underline-offset-4 decoration-2'
-								: ''}"
+							class="text-left text-base font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer text-black {currentView === 'table'
+								? 'bg-black/5 font-bold underline underline-offset-4 decoration-2'
+								: 'hover:bg-black/5'}"
 						>
 							My Cards
 						</button>
 					{/if}
 				</nav>
 
-				<!-- Section 2: Username & Logout -->
+				<!-- Divider -->
+				<div class="h-px bg-black/10 w-full my-1"></div>
+
+				<!-- Section 2: Username & Logout / Auth -->
 				{#if data.user}
-					<div class="flex items-center gap-4">
+					<div class="flex items-center justify-between px-3 py-1">
 						<span
-							class="text-base font-bold text-black max-w-[150px] truncate"
+							class="text-sm font-bold text-black truncate max-w-[200px]"
 							title={data.user.username || data.user.email}
 						>
 							{data.user.username || data.user.email}
@@ -628,24 +747,24 @@
 								mobileMenuOpen = false;
 								handleLogout();
 							}}
-							class="text-base font-bold text-red-600 cursor-pointer"
+							class="text-sm font-bold text-red-600 hover:text-red-700 cursor-pointer"
 						>
 							Log out
 						</button>
 					</div>
 				{:else}
-					<div class="flex items-center gap-4">
+					<div class="flex flex-col gap-2 pt-1">
 						<a
 							href="/login"
 							onclick={() => (mobileMenuOpen = false)}
-							class="text-base text-black font-semibold hover:underline underline-offset-4 cursor-pointer"
+							class="w-full text-center py-2 text-base text-black font-semibold hover:bg-black/5 rounded-xl transition-colors cursor-pointer"
 						>
 							Log In
 						</a>
 						<a
 							href="/register"
 							onclick={() => (mobileMenuOpen = false)}
-							class="px-3.5 py-1.5 text-sm bg-black text-white font-semibold rounded-lg hover:bg-black/80 transition-colors cursor-pointer"
+							class="w-full text-center py-2 bg-black text-white text-sm font-semibold rounded-xl hover:bg-black/80 transition-colors cursor-pointer"
 						>
 							Register
 						</a>
@@ -655,17 +774,19 @@
 		{/if}
 	</header>
 
-	<!-- Deck Selector Bar for Logged-In Users (only in Home Flashcard view) -->
-	{#if data.user && decks.length > 0 && currentView === 'deck'}
+	<!-- Deck Selector Bar for Logged-In Users (hidden during SRS practice) -->
+	{#if data.user && decks.length > 0 && !isPracticing && (currentView === 'deck' || currentView === 'table')}
 		<div class="w-full max-w-5xl flex flex-wrap items-center justify-between gap-3 mb-6 pb-4">
 			<div class="flex items-center gap-2 flex-wrap">
-				<button
-					onclick={() => (showDeckModal = true)}
-					class="px-3.5 py-1.5 rounded-lg text-base font-bold cursor-pointer transition-all flex items-center gap-1.5 bg-blue-600 text-white hover:bg-blue-700 active:scale-95"
-					title="Create new deck"
-				>
-					<span>Add Deck</span>
-				</button>
+				{#if currentView === 'deck'}
+					<button
+						onclick={() => (showDeckModal = true)}
+						class="px-3.5 py-1.5 rounded-lg text-base font-bold cursor-pointer transition-all flex items-center gap-1.5 bg-blue-600 text-white hover:bg-blue-700 active:scale-95"
+						title="Create new deck"
+					>
+						<span>Add Deck</span>
+					</button>
+				{/if}
 				{#each decks as d (d.id)}
 					<button
 						onclick={() => selectDeck(d)}
@@ -748,12 +869,8 @@
 				{:else if practiceSentences.length > 0 && practiceIndex >= practiceSentences.length}
 					<!-- Completion View -->
 					<div class="w-full p-8 bg-white rounded-3xl shadow-sm border border-emerald-100 flex flex-col items-center text-center gap-5">
-						<div class="text-5xl animate-bounce">🎉</div>
 						<div>
-							<h3 class="text-2xl font-black text-black">Practice Completed!</h3>
-							<p class="text-sm text-gray-600 mt-2 max-w-xs">
-								Great job! You have practiced all <strong>{practiceSentences.length}</strong> sentences covering your words in <strong>{currentDeck?.title}</strong>.
-							</p>
+							<h3 class="text-2xl font-black text-black">Practice Completed</h3>
 						</div>
 						<div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs justify-center mt-2">
 							<button
@@ -775,7 +892,7 @@
 								onclick={exitPractice}
 								class="w-full sm:w-auto px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors cursor-pointer text-sm"
 							>
-								Back to Deck
+								Back
 							</button>
 						</div>
 					</div>
@@ -1071,9 +1188,17 @@
 				</a>
 			</div>
 		</div>
+	{:else if currentView === 'decks'}
+		<DecksTable
+			decks={decks}
+			onEdit={(deck) => (deckToEdit = deck)}
+			onDelete={(deck) => (deckToDelete = deck)}
+			onAddDeck={() => (showDeckModal = true)}
+		/>
 	{:else}
 		<CardsTable
-			cards={allCards}
+			cards={currentDeckCards}
+			selectedDeck={currentDeck}
 			onEdit={(card) => (cardToEdit = card)}
 			onDelete={(card) => (cardToDelete = card)}
 			onAddCard={() => (showModal = true)}
@@ -1125,6 +1250,24 @@
 			decks={decks}
 			onUpdate={handleUpdateCard}
 			onCancel={() => (cardToEdit = null)}
+		/>
+	{/if}
+
+	<!-- Edit Deck Modal -->
+	{#if deckToEdit}
+		<EditDeckModal
+			deck={deckToEdit}
+			onUpdate={handleUpdateDeck}
+			onCancel={() => (deckToEdit = null)}
+		/>
+	{/if}
+
+	<!-- Delete Deck Modal -->
+	{#if deckToDelete}
+		<DeleteDeckModal
+			deck={deckToDelete}
+			onConfirm={handleDeleteDeck}
+			onCancel={() => (deckToDelete = null)}
 		/>
 	{/if}
 

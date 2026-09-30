@@ -109,6 +109,15 @@ export async function ensureAuthSchema() {
 		// Ignore if already exists
 	}
 
+	try {
+		await sql`
+			ALTER TABLE cards 
+			ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		`;
+	} catch (err) {
+		// Ignore if already exists
+	}
+
 	schemaInitialized = true;
 }
 

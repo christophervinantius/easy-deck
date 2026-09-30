@@ -14,7 +14,7 @@ export async function GET({ params, locals }) {
 
 		const result = await sql`
 			SELECT 
-				c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id,
+				c.id, c.original_word, c.pronunciation, c.translation, c.translation_pronunciation, c.deck_id, c.created_at,
 				d.title as deck_title
 			FROM cards c
 			JOIN decks d ON c.deck_id = d.id
@@ -90,7 +90,7 @@ export async function PUT({ params, request, locals }) {
 			  AND d.user_id::text = ${String(locals.user.id)}
 			  AND d.deleted_at IS NULL
 			RETURNING 
-				cards.id, cards.original_word, cards.pronunciation, cards.translation, cards.translation_pronunciation, cards.deck_id,
+				cards.id, cards.original_word, cards.pronunciation, cards.translation, cards.translation_pronunciation, cards.deck_id, cards.created_at,
 				d.title as deck_title
 		`;
 

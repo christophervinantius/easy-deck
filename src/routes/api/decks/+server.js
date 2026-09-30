@@ -20,7 +20,7 @@ export async function GET({ locals }) {
 			WHERE d.user_id::text = ${String(locals.user.id)}
 			  AND d.deleted_at IS NULL
 			GROUP BY d.id
-			ORDER BY LOWER(d.title) ASC, d.created_at ASC
+			ORDER BY d.created_at DESC, d.id DESC
 		`;
 
 		return json(decks);
