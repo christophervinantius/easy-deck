@@ -94,10 +94,14 @@
 		if (!dateStr) return '-';
 		try {
 			const d = new Date(dateStr);
-			return d.toLocaleDateString(undefined, {
+			if (isNaN(d.getTime())) return '-';
+			return d.toLocaleString(undefined, {
 				year: 'numeric',
 				month: 'short',
-				day: 'numeric'
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit',
+				hour12: false
 			});
 		} catch {
 			return '-';
@@ -117,7 +121,7 @@
 							<th class="p-3">Pronunciation</th>
 							<th class="p-3">Translation</th>
 							<th class="p-3">Translation Pronunciation</th>
-							<th class="p-3">Created Date</th>
+							<th class="p-3">Created At</th>
 							<th class="p-3 text-center">Action</th>
 						</tr>
 
@@ -190,7 +194,7 @@
 									<td class="p-3 font-semibold text-black">
 										{card.translation_pronunciation ? `${card.translation_pronunciation}` : ''}
 									</td>
-									<td class="p-3 font-medium text-black/70">
+									<td class="p-3 font-medium text-black">
 										{formatDate(card.created_at)}
 									</td>
 									<td class="p-3 text-center">
@@ -215,7 +219,7 @@
 							{/each}
 						{:else}
 							<tr>
-								<td colspan="6" class="p-10 text-center text-sm font-medium text-black/60">
+								<td colspan="6" class="p-10 text-center text-sm font-medium text-black">
 									No cards found matching the current search filters
 								</td>
 							</tr>
@@ -234,7 +238,7 @@
 
 				<div class="flex items-center gap-4">
 					<div class="flex items-center gap-1.5">
-						<label for="page_size_select" class="text-black/60 font-medium">Rows per page:</label>
+						<label for="page_size_select" class="text-black font-medium">Rows per page:</label>
 						<select
 							id="page_size_select"
 							bind:value={pageSize}
@@ -274,7 +278,7 @@
 			<h3 class="text-lg font-bold text-black">
 				{selectedDeck ? `No cards in "${selectedDeck.title}" yet` : 'No cards created yet'}
 			</h3>
-			<p class="text-sm text-black/70">
+			<p class="text-sm text-black">
 				{selectedDeck
 					? `Create a card in "${selectedDeck.title}" to start building your flashcard collection.`
 					: 'Create a card to start building your flashcard collection.'}

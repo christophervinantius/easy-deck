@@ -128,6 +128,47 @@ export async function ensureAuthSchema() {
 		// Ignore if already exists
 	}
 
+	try {
+		await sql`
+			CREATE TABLE IF NOT EXISTS practice_sessions (
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+				user_id TEXT NOT NULL,
+				deck_id UUID REFERENCES decks(id) ON DELETE CASCADE,
+				deck_title VARCHAR(100),
+				title VARCHAR(200),
+				sentences JSONB NOT NULL,
+				style VARCHAR(50) DEFAULT 'casual',
+				current_index INT DEFAULT 0,
+				show_pronunciation BOOLEAN DEFAULT TRUE,
+				is_completed BOOLEAN DEFAULT FALSE,
+				created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+				deleted_at TIMESTAMPTZ DEFAULT NULL
+			)
+		`;
+	} catch (err) {
+		console.error('Error ensuring practice_sessions table:', err);
+	}
+
+	try {
+		await sql`
+			ALTER TABLE practice_sessions 
+			ADD COLUMN IF NOT EXISTS style VARCHAR(50) DEFAULT 'casual'
+		`;
+	} catch (err) {
+		// Ignore if already exists
+	}
+
+	try {
+		await sql`
+			CREATE INDEX IF NOT EXISTS idx_practice_sessions_user 
+			ON practice_sessions (user_id) 
+			WHERE deleted_at IS NULL
+		`;
+	} catch (err) {
+		// Ignore if already exists
+	}
+
 	schemaInitialized = true;
 }
 

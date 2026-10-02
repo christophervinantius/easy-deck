@@ -4,14 +4,25 @@
 		cardCount = 0,
 		onStart,
 		onCancel,
-		initialShowPronunciation = true
+		initialShowPronunciation = true,
+		initialStyle = 'casual'
 	} = $props();
 
 	// Default sentence count: at least 3, up to 30
 	let sentenceCount = $state(Math.min(30, Math.max(3, Math.min(10, cardCount || 3))));
 	let showPronunciation = $state(initialShowPronunciation);
+	let selectedStyle = $state(initialStyle);
 	let loading = $state(false);
 	let error = $state('');
+
+	const STYLE_OPTIONS = [
+		{ id: 'casual', label: 'Daily', icon: '💬', desc: 'Everyday dialogue' },
+		{ id: 'formal', label: 'Formal', icon: '💼', desc: 'Polite and professional' },
+		{ id: 'travel', label: 'Travel', icon: '✈️', desc: 'Trips and food' },
+		{ id: 'story', label: 'Story', icon: '📖', desc: 'Vivid and descriptive' },
+		{ id: 'humorous', label: 'Humorous', icon: '😄', desc: 'Playful and quirky' },
+		{ id: 'simple', label: 'Simple', icon: '🌱', desc: 'Concise and easy' }
+	];
 
 	const handleStart = async (e) => {
 		e.preventDefault();
@@ -22,7 +33,7 @@
 		error = '';
 
 		try {
-			await onStart?.(count, showPronunciation);
+			await onStart?.(count, showPronunciation, selectedStyle);
 		} catch (err) {
 			error = err.message || 'Failed to start practice';
 			loading = false;
@@ -54,7 +65,7 @@
 			<div class="truncate mr-3">
 				<span class="text-sm font-bold text-black truncate block">{currentDeck?.title || 'Current Deck'}</span>
 			</div>
-			<span class="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 whitespace-nowrap">
+			<span class="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-black whitespace-nowrap">
 				{cardCount} {cardCount === 1 ? 'word' : 'words'}
 			</span>
 		</div>
@@ -87,6 +98,37 @@
 					bind:value={sentenceCount}
 					class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600 disabled:opacity-50"
 				/>
+			</div>
+
+			<!-- Sentence Style Selector -->
+			<div>
+				<div class="flex items-center justify-between mb-2">
+					<span class="text-sm font-bold text-black">
+						Sentence Style
+					</span>
+				</div>
+				<div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+					{#each STYLE_OPTIONS as opt (opt.id)}
+						<button
+							type="button"
+							onclick={() => (selectedStyle = opt.id)}
+							disabled={loading}
+							class="flex flex-col text-left p-2.5 rounded-xl border transition-all cursor-pointer select-none disabled:opacity-50 {selectedStyle === opt.id
+								? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/30'
+								: 'bg-white border-gray-200 hover:border-gray-300'}"
+						>
+							<!-- <div class="flex items-center gap-1.5 mb-0.5"> -->
+								<!-- <span class="text-base">{opt.icon}</span> -->
+								<span class="text-xs font-bold text-black leading-tight">
+									{opt.label}
+								</span>
+							<!-- </div> -->
+							<!-- <span class="text-[11px] text-black leading-snug">
+								{opt.desc}
+							</span> -->
+						</button>
+					{/each}
+				</div>
 			</div>
 
 			<!-- Show Pronunciation Option -->

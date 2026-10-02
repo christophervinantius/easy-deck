@@ -10,7 +10,10 @@
 	import DeleteModal from './components/modals/DeleteModal.svelte';
 	import CardsTable from './components/CardsTable.svelte';
 	import DecksTable from './components/DecksTable.svelte';
+	import PracticesTable from './components/PracticesTable.svelte';
 	import SrsPracticeModal from './components/modals/SrsPracticeModal.svelte';
+	import SaveExitPracticeModal from './components/modals/SaveExitPracticeModal.svelte';
+	import DeletePracticeModal from './components/modals/DeletePracticeModal.svelte';
 
 	let { data } = $props();
 
@@ -21,7 +24,7 @@
 	let cardToDelete = $state(null);
 	let deckToEdit = $state(null);
 	let deckToDelete = $state(null);
-	let currentView = $state('deck'); // 'deck' | 'decks' | 'table'
+	let currentView = $state('deck'); // 'deck' | 'decks' | 'table' | 'practices'
 	let mobileMenuOpen = $state(false);
 
 	let decks = $state([]);
@@ -50,12 +53,82 @@
 	let practiceSentences = $state([]);
 	let practiceIndex = $state(0);
 	let srsShowPronunciation = $state(true);
+	let srsSentenceStyle = $state('casual');
 	let showPracticePronunciation = $state(true);
 	let showPracticeTranslation = $state(false);
 	let showPracticeTranslationPronunciation = $state(false);
 	let practiceAnimClass = $state('card-anim-idle');
 	let isNavigatingPractice = $state(false);
 	let lastRequestedSentenceCount = $state(15);
+	let currentSpeakingText = $state('');
+
+	// Saved SRS Practice Sessions state
+	let savedPractices = $state([]);
+	let loadingPractices = $state(false);
+	let currentPracticeSessionId = $state(null);
+	let isCurrentSessionSaved = $state(false);
+	let isSavingSession = $state(false);
+	let showSaveExitModal = $state(false);
+	let practiceToDelete = $state(null);
+
+	const detectLanguage = (text) => {
+		if (!text) return null;
+		if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
+		if (/[\uAC00-\uD7AF\u1100-\u11FF]/.test(text)) return 'ko-KR';
+		if (/[\u4E00-\u9FFF]/.test(text)) return 'zh-CN';
+		if (/[\u0400-\u04FF]/.test(text)) return 'ru-RU';
+		if (/[\u0600-\u06FF]/.test(text)) return 'ar-SA';
+		if (/[¿¡áéíóúñÁÉÍÓÚÑ]/.test(text)) return 'es-ES';
+		if (/[àâçéèêëîïôûùüÿœæÀÂÇÉÈÊËÎÏÔÛÙÜŸŒÆ]/.test(text)) return 'fr-FR';
+		if (/[äöüßÄÖÜ]/.test(text)) return 'de-DE';
+		if (/^[a-zA-Z0-9\s.,!?'"()\-–—:;]+$/.test(text.trim())) return 'en-US';
+		return null;
+	};
+
+	const stopSpeaking = () => {
+		if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+			window.speechSynthesis.cancel();
+		}
+		currentSpeakingText = '';
+	};
+
+	const speakText = (text) => {
+		if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text) return;
+
+		if (currentSpeakingText === text) {
+			stopSpeaking();
+			return;
+		}
+
+		stopSpeaking();
+
+		const utterance = new SpeechSynthesisUtterance(text);
+		utterance.rate = 0.9;
+
+		const lang = detectLanguage(text);
+		if (lang) {
+			utterance.lang = lang;
+			const voices = window.speechSynthesis.getVoices();
+			const voice = voices.find(
+				(v) => v.lang === lang || v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())
+			);
+			if (voice) {
+				utterance.voice = voice;
+			}
+		}
+
+		utterance.onstart = () => {
+			currentSpeakingText = text;
+		};
+		utterance.onend = () => {
+			if (currentSpeakingText === text) currentSpeakingText = '';
+		};
+		utterance.onerror = () => {
+			if (currentSpeakingText === text) currentSpeakingText = '';
+		};
+
+		window.speechSynthesis.speak(utterance);
+	};
 
 	// Toast notifications
 	let toast = $state(null);
@@ -75,6 +148,7 @@
 	};
 
 	const pickRandomCard = async (list = cards, animate = false) => {
+		stopSpeaking();
 		if (!list || list.length === 0) {
 			currentCard = null;
 			showPronunciation = false;
@@ -219,9 +293,10 @@
 		fetchCards(deck?.id);
 	};
 
-	const handleStartSrsPractice = async (sentenceCount, showPronunciation = true) => {
+	const handleStartSrsPractice = async (sentenceCount, showPronunciation = true, style = 'casual') => {
 		lastRequestedSentenceCount = sentenceCount;
 		srsShowPronunciation = showPronunciation;
+		srsSentenceStyle = style;
 		practiceGenerationError = '';
 
 		try {
@@ -231,7 +306,8 @@
 				body: JSON.stringify({
 					deck_id: currentDeck?.id,
 					sentence_count: sentenceCount,
-					show_pronunciation: showPronunciation
+					show_pronunciation: showPronunciation,
+					style: style
 				})
 			});
 
@@ -242,6 +318,8 @@
 
 			practiceSentences = data.sentences || [];
 			practiceIndex = 0;
+			currentPracticeSessionId = null;
+			isCurrentSessionSaved = false;
 			showPracticePronunciation = srsShowPronunciation;
 			showPracticeTranslation = false;
 			showPracticeTranslationPronunciation = false;
@@ -255,17 +333,23 @@
 	};
 
 	const exitPractice = () => {
+		stopSpeaking();
 		isPracticing = false;
 		practiceGenerationError = '';
 		practiceSentences = [];
 		practiceIndex = 0;
+		srsSentenceStyle = 'casual';
 		showPracticePronunciation = srsShowPronunciation;
 		showPracticeTranslation = false;
 		showPracticeTranslationPronunciation = false;
+		currentPracticeSessionId = null;
+		isCurrentSessionSaved = false;
+		showSaveExitModal = false;
 	};
 
 	const nextPracticeSentence = async () => {
 		if (isNavigatingPractice) return;
+		stopSpeaking();
 		if (practiceIndex < practiceSentences.length - 1) {
 			isNavigatingPractice = true;
 			practiceAnimClass = 'card-anim-discard';
@@ -290,6 +374,7 @@
 
 	const prevPracticeSentence = async () => {
 		if (isNavigatingPractice || practiceIndex <= 0) return;
+		stopSpeaking();
 		isNavigatingPractice = true;
 		practiceAnimClass = 'card-anim-discard';
 		await new Promise((r) => setTimeout(r, 180));
@@ -308,11 +393,185 @@
 	};
 
 	const restartPractice = () => {
+		stopSpeaking();
 		practiceIndex = 0;
 		showPracticePronunciation = srsShowPronunciation;
 		showPracticeTranslation = false;
 		showPracticeTranslationPronunciation = false;
 		practiceAnimClass = 'card-anim-idle';
+	};
+
+	const fetchSavedPractices = async () => {
+		if (!data.user) {
+			savedPractices = [];
+			return;
+		}
+
+		loadingPractices = true;
+		try {
+			const res = await fetch('/api/practices');
+			if (res.ok) {
+				const fetched = await res.json();
+				savedPractices = fetched || [];
+			}
+		} catch (err) {
+			console.error('Failed to fetch saved practice sessions:', err);
+		} finally {
+			loadingPractices = false;
+		}
+	};
+
+	const savePracticeSession = async (isCompleted = false) => {
+		if (isSavingSession) return;
+		if (!practiceSentences || practiceSentences.length === 0) return;
+
+		isSavingSession = true;
+		try {
+			if (currentPracticeSessionId) {
+				// Update existing saved session
+				const res = await fetch(`/api/practices/${currentPracticeSessionId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						current_index: practiceIndex,
+						is_completed: isCompleted
+					})
+				});
+
+				if (!res.ok) {
+					const err = await res.json();
+					throw new Error(err.error || 'Failed to update practice session');
+				}
+
+				const updated = await res.json();
+				isCurrentSessionSaved = true;
+				showToast('Practice session progress saved!', 'success');
+				fetchSavedPractices();
+				return updated;
+			} else {
+				// Create new saved session
+				const payload = {
+					deck_id: currentDeck?.id || null,
+					deck_title: currentDeck?.title || 'Deck',
+					title: currentDeck ? `${currentDeck.title} Practice` : 'Practice Session',
+					style: srsSentenceStyle || 'casual',
+					sentences: practiceSentences,
+					current_index: practiceIndex,
+					show_pronunciation: srsShowPronunciation,
+					is_completed: isCompleted
+				};
+
+				const res = await fetch('/api/practices', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(payload)
+				});
+
+				if (!res.ok) {
+					const err = await res.json();
+					throw new Error(err.error || 'Failed to save practice session');
+				}
+
+				const created = await res.json();
+				currentPracticeSessionId = created.id;
+				isCurrentSessionSaved = true;
+				showToast('Practice session saved successfully!', 'success');
+				fetchSavedPractices();
+				return created;
+			}
+		} catch (err) {
+			console.error('Failed to save practice session:', err);
+			showToast(err.message || 'Failed to save practice session', 'error');
+			throw err;
+		} finally {
+			isSavingSession = false;
+		}
+	};
+
+	const handleSaveAndExitPractice = async () => {
+		try {
+			const isDone = practiceIndex >= practiceSentences.length;
+			await savePracticeSession(isDone);
+			showSaveExitModal = false;
+			exitPractice();
+		} catch (err) {
+			// Toast already shown in savePracticeSession
+		}
+	};
+
+	const handleExitWithoutSaving = () => {
+		showSaveExitModal = false;
+		exitPractice();
+	};
+
+	const handleResumePractice = async (practice) => {
+		try {
+			stopSpeaking();
+			const res = await fetch(`/api/practices/${practice.id}`);
+			if (!res.ok) {
+				const err = await res.json();
+				throw new Error(err.error || 'Failed to load practice session');
+			}
+
+			const fullSession = await res.json();
+			const loadedSentences = fullSession.sentences || [];
+			if (loadedSentences.length === 0) {
+				throw new Error('This practice session has no sentences');
+			}
+
+			currentPracticeSessionId = fullSession.id;
+			isCurrentSessionSaved = true;
+			practiceSentences = loadedSentences;
+			srsSentenceStyle = fullSession.style || 'casual';
+			// If already completed previously, restart from 0, otherwise resume at current_index
+			practiceIndex = fullSession.is_completed
+				? 0
+				: Math.min(fullSession.current_index || 0, loadedSentences.length - 1);
+			srsShowPronunciation = fullSession.show_pronunciation ?? true;
+			showPracticePronunciation = srsShowPronunciation;
+			showPracticeTranslation = false;
+			showPracticeTranslationPronunciation = false;
+
+			if (fullSession.deck_id) {
+				const matchedDeck = decks.find((d) => d.id === fullSession.deck_id);
+				if (matchedDeck) {
+					currentDeck = matchedDeck;
+				} else {
+					currentDeck = { id: fullSession.deck_id, title: fullSession.deck_title };
+				}
+			}
+
+			currentView = 'deck';
+			isPracticing = true;
+		} catch (err) {
+			console.error('Error resuming practice session:', err);
+			showToast(err.message || 'Failed to resume practice session', 'error');
+		}
+	};
+
+	const handleDeletePractice = async (practiceId) => {
+		try {
+			const res = await fetch(`/api/practices/${practiceId}`, {
+				method: 'DELETE'
+			});
+
+			if (!res.ok) {
+				const err = await res.json();
+				throw new Error(err.error || 'Failed to delete practice session');
+			}
+
+			savedPractices = savedPractices.filter((p) => p.id !== practiceId);
+			if (currentPracticeSessionId === practiceId) {
+				currentPracticeSessionId = null;
+				isCurrentSessionSaved = false;
+			}
+			practiceToDelete = null;
+			showToast('Practice session deleted successfully!', 'success');
+		} catch (err) {
+			console.error('Failed to delete practice session:', err);
+			showToast(err.message || 'Failed to delete practice session', 'error');
+			throw err;
+		}
 	};
 
 	$effect(() => {
@@ -321,11 +580,13 @@
 				fetchCards(currentDeck?.id);
 			});
 			fetchAllCards();
+			fetchSavedPractices();
 		} else {
 			decks = [];
 			currentDeck = null;
 			cards = [];
 			allCards = [];
+			savedPractices = [];
 			currentCard = null;
 			loading = false;
 			currentView = 'deck';
@@ -337,6 +598,7 @@
 			await fetchDecks();
 			await fetchCards(currentDeck?.id);
 			await fetchAllCards();
+			await fetchSavedPractices();
 		}
 	});
 
@@ -612,6 +874,17 @@
 					{#if data.user}
 						<button
 							onclick={() => {
+								currentView = 'practices';
+								fetchSavedPractices();
+							}}
+							class="text-base font-semibold cursor-pointer text-black {currentView === 'practices'
+								? 'underline underline-offset-4 decoration-2'
+								: ''}"
+						>
+							My Practices
+						</button>
+						<button
+							onclick={() => {
 								currentView = 'decks';
 								fetchDecks();
 							}}
@@ -706,6 +979,18 @@
 						Home
 					</button>
 					{#if data.user}
+						<button
+							onclick={() => {
+								currentView = 'practices';
+								fetchSavedPractices();
+								mobileMenuOpen = false;
+							}}
+							class="text-left text-base font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer text-black {currentView === 'practices'
+								? 'bg-black/5 font-bold underline underline-offset-4 decoration-2'
+								: 'hover:bg-black/5'}"
+						>
+							My Practices
+						</button>
 						<button
 							onclick={() => {
 								currentView = 'decks';
@@ -875,25 +1160,45 @@
 						<div>
 							<h3 class="text-2xl font-black text-black">Practice Completed</h3>
 						</div>
-						<div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs justify-center mt-2">
+						<div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md justify-center mt-2 flex-wrap">
+							{#if data.user}
+								{#if !isCurrentSessionSaved}
+									<button
+										type="button"
+										onclick={() => savePracticeSession(true)}
+										disabled={isSavingSession}
+										class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all cursor-pointer text-sm shadow-xs flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+									>
+										<span>💾</span>
+										<span>{isSavingSession ? 'Saving...' : 'Save Session'}</span>
+									</button>
+								{:else}
+									<div class="w-full sm:w-auto px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold rounded-xl text-sm flex items-center justify-center gap-1.5 shadow-xs">
+										<svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+										</svg>
+										<span>Saved in Practices</span>
+									</div>
+								{/if}
+							{/if}
 							<button
 								type="button"
 								onclick={restartPractice}
-								class="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all cursor-pointer text-sm shadow-xs"
+								class="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all cursor-pointer text-sm shadow-xs active:scale-95"
 							>
 								Review Again
 							</button>
 							<button
 								type="button"
 								onclick={() => (showSrsModal = true)}
-								class="w-full sm:w-auto px-5 py-2.5 bg-black text-white font-bold rounded-xl hover:bg-black/80 transition-all cursor-pointer text-sm shadow-xs"
+								class="w-full sm:w-auto px-5 py-2.5 bg-black text-white font-bold rounded-xl hover:bg-black/80 transition-all cursor-pointer text-sm shadow-xs active:scale-95"
 							>
 								New Session
 							</button>
 							<button
 								type="button"
 								onclick={exitPractice}
-								class="w-full sm:w-auto px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors cursor-pointer text-sm"
+								class="w-full sm:w-auto px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors cursor-pointer text-sm active:scale-95"
 							>
 								Back
 							</button>
@@ -908,10 +1213,30 @@
 					<div
 						class="flashcard w-full select-none p-6 sm:p-8 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col justify-between {practiceAnimClass}"
 					>
-						<!-- Card Header: Deck Title and covered words chips -->
-						<div class="flex flex-col gap-2 mb-3">
-							<div class="flex items-center justify-between text-base font-bold text-black/60">
-								<span class="truncate max-w-[180px]">{currentDeck?.title || 'Deck'}</span>
+						<!-- Card Header: Deck Title, Style badge, TTS button, and progress counter -->
+						<div class="flex items-center justify-between text-base font-bold text-black mb-3">
+							<div class="flex items-center gap-2 truncate max-w-[200px]">
+								<span class="truncate">{currentDeck?.title || 'Deck'}</span>
+								{#if srsSentenceStyle && srsSentenceStyle !== 'casual'}
+									<span class="px-2 py-0.5 text-[11px] font-semibold bg-gray-100 text-black rounded-md capitalize shrink-0">
+										{srsSentenceStyle}
+									</span>
+								{/if}
+							</div>
+							<div class="flex items-center gap-2.5">
+								<button
+									type="button"
+									onclick={() => speakText(currentSentence.sentence)}
+									class="p-1.5 rounded-xl transition-all cursor-pointer {currentSpeakingText === currentSentence.sentence
+										? 'text-emerald-600 bg-emerald-50 ring-2 ring-emerald-500/30'
+										: 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 active:scale-95'}"
+									title={currentSpeakingText === currentSentence.sentence ? 'Stop listening' : 'Listen to sentence'}
+									aria-label="Listen to sentence"
+								>
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+									</svg>
+								</button>
 								<span class="text-emerald-700 text-base font-bold">
 									{practiceIndex + 1} / {practiceSentences.length}
 								</span>
@@ -1018,7 +1343,13 @@
 						</button>
 
 						<button
-							onclick={exitPractice}
+							onclick={() => {
+								if (data.user) {
+									showSaveExitModal = true;
+								} else {
+									exitPractice();
+								}
+							}}
 							class="px-4 py-2.5 bg-white text-gray-700 text-sm font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 hover:bg-gray-100 hover:text-black active:scale-95"
 							title="Exit practice session"
 						>
@@ -1032,8 +1363,21 @@
 					class="flashcard w-full select-none p-6 sm:p-8 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col justify-between {cardAnimClass}"
 				>
 					<!-- Header inside card -->
-					<div class="flex items-center justify-between text-base font-bold text-black/60 mb-2">
+					<div class="flex items-center justify-between text-base font-bold text-black mb-2">
 						<span class="truncate max-w-[180px]">{currentCard.deck_title || currentDeck?.title || 'Deck'}</span>
+						<button
+							type="button"
+							onclick={() => speakText(currentCard.original_word)}
+							class="p-1.5 rounded-xl transition-all cursor-pointer {currentSpeakingText === currentCard.original_word
+								? 'text-blue-600 bg-blue-50 ring-2 ring-blue-500/30'
+								: 'text-gray-400 hover:text-blue-600 hover:bg-blue-50 active:scale-95'}"
+							title={currentSpeakingText === currentCard.original_word ? 'Stop listening' : 'Listen to word'}
+							aria-label="Listen to word"
+						>
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+							</svg>
+						</button>
 					</div>
 
 					<!-- Center Content -->
@@ -1200,6 +1544,15 @@
 			onDelete={(deck) => (deckToDelete = deck)}
 			onAddDeck={() => (showDeckModal = true)}
 		/>
+	{:else if currentView === 'practices'}
+		<PracticesTable
+			practices={savedPractices}
+			onResume={handleResumePractice}
+			onDelete={(practice) => (practiceToDelete = practice)}
+			onGoHome={() => {
+				currentView = 'deck';
+			}}
+		/>
 	{:else}
 		<CardsTable
 			cards={currentDeckCards}
@@ -1282,8 +1635,31 @@
 			currentDeck={currentDeck}
 			cardCount={cards.length}
 			initialShowPronunciation={srsShowPronunciation}
+			initialStyle={srsSentenceStyle}
 			onStart={handleStartSrsPractice}
 			onCancel={() => (showSrsModal = false)}
+		/>
+	{/if}
+
+	<!-- Save & Exit SRS Practice Modal -->
+	{#if showSaveExitModal}
+		<SaveExitPracticeModal
+			currentIndex={practiceIndex}
+			totalSentences={practiceSentences.length}
+			isAlreadySaved={isCurrentSessionSaved}
+			saving={isSavingSession}
+			onSaveAndExit={handleSaveAndExitPractice}
+			onExitWithoutSaving={handleExitWithoutSaving}
+			onCancel={() => (showSaveExitModal = false)}
+		/>
+	{/if}
+
+	<!-- Delete Practice Modal -->
+	{#if practiceToDelete}
+		<DeletePracticeModal
+			practice={practiceToDelete}
+			onConfirm={handleDeletePractice}
+			onCancel={() => (practiceToDelete = null)}
 		/>
 	{/if}
 </div>

@@ -100,7 +100,7 @@ export async function POST({ request, locals }) {
 	try {
 		await ensureAuthSchema();
 		const body = await request.json();
-		const { deck_id, sentence_count = 10, show_pronunciation = true } = body;
+		const { deck_id, sentence_count = 10, show_pronunciation = true, style = 'casual' } = body;
 
 		if (!deck_id) {
 			return json({ error: 'deck_id is required' }, { status: 400 });
@@ -108,6 +108,18 @@ export async function POST({ request, locals }) {
 
 		// Clamp sentence count between 3 and 30
 		const count = Math.min(30, Math.max(3, parseInt(sentence_count, 10) || 3));
+
+		// Sentence style instruction prompts
+		const STYLE_PROMPTS = {
+			casual: 'Casual & Daily Conversation: Everyday, natural spoken expressions used with friends, family, or in relaxed informal settings.',
+			formal: 'Formal & Business: Polite, courteous, and workplace-appropriate language suitable for business meetings, polite requests, and professional interactions.',
+			travel: 'Travel & Dining: Practical, real-world situations like navigating public transport, ordering at restaurants or cafes, airport check-in, hotels, and asking for directions.',
+			story: 'Story & Narrative: Engaging, expressive sentences with descriptive actions, emotions, or short narrative moments that paint a vivid scene.',
+			humorous: 'Humorous & Playful: Fun, witty, or slightly quirky everyday scenarios that make the vocabulary memorable, lighthearted, and enjoyable.',
+			simple: 'Short & Simple: Clear, concise sentences with straightforward grammar and simple phrasing, ideal for beginner or quick reinforcement.'
+		};
+
+		const chosenStylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.casual;
 
 		// Verify deck ownership and fetch cards
 		const deck = await sql`
@@ -182,7 +194,10 @@ CONTENT REQUIREMENTS:
    - NOTE: You DO NOT need to include all words from the vocabulary list. Not all words are required to appear.
    - Each sentence should naturally incorporate one or more words from the vocabulary list.
    - Do NOT force unnatural or awkward combinations. Sentences should feel authentic, conversational, and contextually rich in the target language (the language of the original words).
-2. For each sentence, provide:
+2. TONE & SENTENCE STYLE:
+   - Target Style: ${chosenStylePrompt}
+   - Embody this requested style naturally in the scenarios, vocabulary choices, and expressions across all ${count} practice sentences.
+3. For each sentence, provide:
    - "index": Number from 1 to ${count}
    - "sentence": The full natural sentence in the target language.
 ${
@@ -329,6 +344,7 @@ Return ONLY a valid JSON array of ${missing} objects with no markdown wrapping:
 		return json({
 			deck_id: deck[0].id,
 			deck_title: deck[0].title,
+			style,
 			requested_count: count,
 			total_generated: sentences.length,
 			total_cards: cards.length,

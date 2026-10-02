@@ -158,7 +158,7 @@
 		<div class="text-center mt-6">
 			<a
 				href="/"
-				class="text-sm font-semibold text-black/70 hover:text-black transition-colors"
+				class="text-sm font-semibold text-black hover:underline transition-colors"
 			>
 				Back to home
 			</a>
