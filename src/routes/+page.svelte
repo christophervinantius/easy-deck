@@ -49,7 +49,8 @@
 	let practiceGenerationError = $state('');
 	let practiceSentences = $state([]);
 	let practiceIndex = $state(0);
-	let showPracticePronunciation = $state(false);
+	let srsShowPronunciation = $state(true);
+	let showPracticePronunciation = $state(true);
 	let showPracticeTranslation = $state(false);
 	let showPracticeTranslationPronunciation = $state(false);
 	let practiceAnimClass = $state('card-anim-idle');
@@ -218,8 +219,9 @@
 		fetchCards(deck?.id);
 	};
 
-	const handleStartSrsPractice = async (sentenceCount) => {
+	const handleStartSrsPractice = async (sentenceCount, showPronunciation = true) => {
 		lastRequestedSentenceCount = sentenceCount;
+		srsShowPronunciation = showPronunciation;
 		practiceGenerationError = '';
 
 		try {
@@ -228,7 +230,8 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					deck_id: currentDeck?.id,
-					sentence_count: sentenceCount
+					sentence_count: sentenceCount,
+					show_pronunciation: showPronunciation
 				})
 			});
 
@@ -239,7 +242,7 @@
 
 			practiceSentences = data.sentences || [];
 			practiceIndex = 0;
-			showPracticePronunciation = false;
+			showPracticePronunciation = srsShowPronunciation;
 			showPracticeTranslation = false;
 			showPracticeTranslationPronunciation = false;
 			showSrsModal = false;
@@ -256,7 +259,7 @@
 		practiceGenerationError = '';
 		practiceSentences = [];
 		practiceIndex = 0;
-		showPracticePronunciation = false;
+		showPracticePronunciation = srsShowPronunciation;
 		showPracticeTranslation = false;
 		showPracticeTranslationPronunciation = false;
 	};
@@ -269,7 +272,7 @@
 			await new Promise((r) => setTimeout(r, 180));
 
 			practiceIndex += 1;
-			showPracticePronunciation = false;
+			showPracticePronunciation = srsShowPronunciation;
 			showPracticeTranslation = false;
 			showPracticeTranslationPronunciation = false;
 
@@ -292,7 +295,7 @@
 		await new Promise((r) => setTimeout(r, 180));
 
 		practiceIndex -= 1;
-		showPracticePronunciation = false;
+		showPracticePronunciation = srsShowPronunciation;
 		showPracticeTranslation = false;
 		showPracticeTranslationPronunciation = false;
 
@@ -306,7 +309,7 @@
 
 	const restartPractice = () => {
 		practiceIndex = 0;
-		showPracticePronunciation = false;
+		showPracticePronunciation = srsShowPronunciation;
 		showPracticeTranslation = false;
 		showPracticeTranslationPronunciation = false;
 		practiceAnimClass = 'card-anim-idle';
@@ -925,7 +928,7 @@
 							</div>
 
 							<!-- Pronunciation Section (Separately toggleable) -->
-							{#if currentSentence.pronunciation}
+							{#if srsShowPronunciation && currentSentence.pronunciation}
 								<button
 									type="button"
 									onclick={() => (showPracticePronunciation = !showPracticePronunciation)}
@@ -1129,14 +1132,16 @@
 							>
 								Duplicate Card
 							</button>
-							<button
-								onclick={() => (showSrsModal = true)}
-								disabled={!cards || cards.length === 0}
-								class="px-3.5 py-1.5 bg-emerald-600 text-white text-base font-semibold rounded-xl cursor-pointer hover:bg-emerald-700 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-								title="Practice sentences"
-							>
-								<span>SRS Practice</span>
-							</button>
+							{#if currentDeck?.enable_srs}
+								<button
+									onclick={() => (showSrsModal = true)}
+									disabled={!cards || cards.length === 0}
+									class="px-3.5 py-1.5 bg-emerald-600 text-white text-base font-semibold rounded-xl cursor-pointer hover:bg-emerald-700 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+									title="Practice sentences"
+								>
+									<span>SRS Practice</span>
+								</button>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -1276,6 +1281,7 @@
 		<SrsPracticeModal
 			currentDeck={currentDeck}
 			cardCount={cards.length}
+			initialShowPronunciation={srsShowPronunciation}
 			onStart={handleStartSrsPractice}
 			onCancel={() => (showSrsModal = false)}
 		/>

@@ -2,6 +2,7 @@
 	let { deck, onUpdate, onCancel } = $props();
 
 	let title = $state(deck?.title || '');
+	let enableSrs = $state(Boolean(deck?.enable_srs));
 	let loading = $state(false);
 	let error = $state('');
 
@@ -17,7 +18,8 @@
 		loading = true;
 		try {
 			await onUpdate?.(deck?.id, {
-				title: title.trim()
+				title: title.trim(),
+				enable_srs: enableSrs
 			});
 		} catch (err) {
 			error = err.message || 'Failed to update deck';
@@ -38,7 +40,7 @@
 		{/if}
 
 		<form onsubmit={handleSubmit}>
-			<div class="mb-6">
+			<div class="mb-5">
 				<label class="block text-sm font-semibold mb-2 text-black" for="edit_deck_title">
 					Deck Title <span class="text-red-500">*</span>
 				</label>
@@ -51,6 +53,46 @@
 					placeholder="e.g. Spanish Vocabulary, History Chapter 1"
 					class="border border-gray-300 p-2.5 rounded-lg w-full text-black font-medium focus:outline-none focus:ring-2 focus:ring-black"
 				/>
+			</div>
+
+			<!-- SRS Practice Option -->
+			<div class="mb-6">
+				<label
+					for="edit_deck_enable_srs"
+					class="inline-flex items-start gap-3 cursor-pointer select-none group"
+				>
+					<div class="relative flex items-center justify-center mt-0.5">
+						<input
+							id="edit_deck_enable_srs"
+							type="checkbox"
+							bind:checked={enableSrs}
+							disabled={loading}
+							class="sr-only peer"
+						/>
+						<div
+							class="w-5 h-5 rounded-lg border-2 transition-all flex items-center justify-center {enableSrs
+								? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+								: 'bg-white border-gray-300 group-hover:border-gray-400'} peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 peer-disabled:opacity-50"
+						>
+							{#if enableSrs}
+								<svg
+									class="w-3.5 h-3.5 text-white"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+									viewBox="0 0 24 24"
+								>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+							{/if}
+						</div>
+					</div>
+					<div>
+						<span class="text-sm font-bold text-black group-hover:text-emerald-700 transition-colors block">
+							SRS Practice
+						</span>
+					</div>
+				</label>
 			</div>
 
 			<div class="flex justify-end gap-3">

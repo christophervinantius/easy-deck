@@ -13,7 +13,7 @@ export async function GET({ locals }) {
 
 		const decks = await sql`
 			SELECT 
-				d.id, d.title, d.created_at,
+				d.id, d.title, d.enable_srs, d.created_at,
 				COUNT(c.id)::int AS card_count
 			FROM decks d
 			LEFT JOIN cards c ON c.deck_id = d.id
@@ -40,6 +40,7 @@ export async function POST({ request, locals }) {
 		await ensureAuthSchema();
 		const body = await request.json();
 		const title = body.title?.trim();
+		const enable_srs = Boolean(body.enable_srs);
 
 		if (!title) {
 			return json(
@@ -49,10 +50,11 @@ export async function POST({ request, locals }) {
 		}
 
 		const result = await sql`
-			INSERT INTO decks (user_id, title)
+			INSERT INTO decks (user_id, title, enable_srs)
 			VALUES (
 				${String(locals.user.id)},
-				${title}
+				${title},
+				${enable_srs}
 			)
 			RETURNING *
 		`;

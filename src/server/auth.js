@@ -73,12 +73,22 @@ export async function ensureAuthSchema() {
 				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 				user_id TEXT NOT NULL,
 				title VARCHAR(100) NOT NULL,
+				enable_srs BOOLEAN DEFAULT FALSE,
 				created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 				deleted_at TIMESTAMPTZ DEFAULT NULL
 			)
 		`;
 	} catch (err) {
 		console.error('Error ensuring decks table:', err);
+	}
+
+	try {
+		await sql`
+			ALTER TABLE decks 
+			ADD COLUMN IF NOT EXISTS enable_srs BOOLEAN DEFAULT FALSE
+		`;
+	} catch (err) {
+		// Ignore if already exists
 	}
 
 	try {

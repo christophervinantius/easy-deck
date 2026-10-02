@@ -1,8 +1,15 @@
 <script>
-	let { currentDeck = null, cardCount = 0, onStart, onCancel } = $props();
+	let {
+		currentDeck = null,
+		cardCount = 0,
+		onStart,
+		onCancel,
+		initialShowPronunciation = true
+	} = $props();
 
-	// Default sentence count: at least 5, up to 50
-	let sentenceCount = $state(Math.min(50, Math.max(5, Math.min(10, cardCount || 5))));
+	// Default sentence count: at least 3, up to 30
+	let sentenceCount = $state(Math.min(30, Math.max(3, Math.min(10, cardCount || 3))));
+	let showPronunciation = $state(initialShowPronunciation);
 	let loading = $state(false);
 	let error = $state('');
 
@@ -10,12 +17,12 @@
 		e.preventDefault();
 		if (loading) return;
 
-		const count = Math.min(50, Math.max(5, Number(sentenceCount) || 5));
+		const count = Math.min(30, Math.max(3, Number(sentenceCount) || 3));
 		loading = true;
 		error = '';
 
 		try {
-			await onStart?.(count);
+			await onStart?.(count, showPronunciation);
 		} catch (err) {
 			error = err.message || 'Failed to start practice';
 			loading = false;
@@ -73,13 +80,51 @@
 				<input
 					id="sentence_slider"
 					type="range"
-					min="5"
-					max="50"
+					min="3"
+					max="30"
 					step="1"
 					disabled={loading}
 					bind:value={sentenceCount}
 					class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600 disabled:opacity-50"
 				/>
+			</div>
+
+			<!-- Show Pronunciation Option -->
+			<div class="pt-1">
+				<label
+					for="show_pronunciation_checkbox"
+					class="inline-flex items-center gap-3 cursor-pointer select-none group"
+				>
+					<div class="relative flex items-center justify-center">
+						<input
+							id="show_pronunciation_checkbox"
+							type="checkbox"
+							bind:checked={showPronunciation}
+							disabled={loading}
+							class="sr-only peer"
+						/>
+						<div
+							class="w-5 h-5 rounded-lg border-2 transition-all flex items-center justify-center {showPronunciation
+								? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+								: 'bg-white border-gray-300 group-hover:border-gray-400'} peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 peer-disabled:opacity-50"
+						>
+							{#if showPronunciation}
+								<svg
+									class="w-3.5 h-3.5 text-white"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+									viewBox="0 0 24 24"
+								>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+							{/if}
+						</div>
+					</div>
+					<span class="text-sm font-bold text-black group-hover:text-emerald-700 transition-colors">
+						Show pronunciation
+					</span>
+				</label>
 			</div>
 
 			<!-- Actions -->

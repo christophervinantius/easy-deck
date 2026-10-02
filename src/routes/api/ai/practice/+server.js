@@ -100,18 +100,18 @@ export async function POST({ request, locals }) {
 	try {
 		await ensureAuthSchema();
 		const body = await request.json();
-		const { deck_id, sentence_count = 10 } = body;
+		const { deck_id, sentence_count = 10, show_pronunciation = true } = body;
 
 		if (!deck_id) {
 			return json({ error: 'deck_id is required' }, { status: 400 });
 		}
 
-		// Clamp sentence count between 5 and 50
-		const count = Math.min(50, Math.max(5, parseInt(sentence_count, 10) || 5));
+		// Clamp sentence count between 3 and 30
+		const count = Math.min(30, Math.max(3, parseInt(sentence_count, 10) || 3));
 
 		// Verify deck ownership and fetch cards
 		const deck = await sql`
-			SELECT id, title
+			SELECT id, title, enable_srs
 			FROM decks
 			WHERE id::text = ${String(deck_id)}
 			  AND user_id::text = ${String(locals.user.id)}
@@ -121,6 +121,13 @@ export async function POST({ request, locals }) {
 
 		if (deck.length === 0) {
 			return json({ error: 'Deck not found' }, { status: 404 });
+		}
+
+		if (!deck[0].enable_srs) {
+			return json(
+				{ error: 'SRS Practice is not enabled for this deck. You can enable it by editing the deck.' },
+				{ status: 400 }
+			);
 		}
 
 		const cards = await sql`
@@ -178,7 +185,11 @@ CONTENT REQUIREMENTS:
 2. For each sentence, provide:
    - "index": Number from 1 to ${count}
    - "sentence": The full natural sentence in the target language.
-   - "pronunciation": Pronunciation guide (e.g. Pinyin, Romaji, Kana/Furigana, or phonetic guide) if applicable to the target language (especially for non-Latin scripts like Japanese, Chinese, Korean, Russian, Arabic, etc.). If the target language uses the standard Latin alphabet with standard reading (e.g. English, Spanish), leave as null.
+${
+	show_pronunciation
+		? '   - "pronunciation": Pronunciation guide (e.g. Pinyin, Romaji, Kana/Furigana, or phonetic guide) if applicable to the target language (especially for non-Latin scripts like Japanese, Chinese, Korean, Russian, Arabic, etc.). If the target language uses the standard Latin alphabet with standard reading (e.g. English, Spanish), leave as null.'
+		: '   - "pronunciation": Always set to null (pronunciation is disabled).'
+}
    - "translation": The natural translation of the sentence into the language of the provided card translations.
    - "translation_pronunciation": Pronunciation of the translation if relevant, otherwise null.
    - "covered_words": An array of the exact original words/phrases from the vocabulary list that are included in this sentence.

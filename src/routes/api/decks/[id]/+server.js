@@ -14,7 +14,7 @@ export async function GET({ params, locals }) {
 
 		const result = await sql`
 			SELECT 
-				d.id, d.title, d.created_at,
+				d.id, d.title, d.enable_srs, d.created_at,
 				COUNT(c.id)::int AS card_count
 			FROM decks d
 			LEFT JOIN cards c ON c.deck_id = d.id
@@ -52,15 +52,29 @@ export async function PUT({ params, request, locals }) {
 			return json({ error: 'Deck title is required' }, { status: 400 });
 		}
 
-		const result = await sql`
-			UPDATE decks
-			SET
-				title = ${title}
-			WHERE id::text = ${id}
-			  AND user_id::text = ${String(locals.user.id)}
-			  AND deleted_at IS NULL
-			RETURNING *
-		`;
+		let result;
+		if ('enable_srs' in body) {
+			result = await sql`
+				UPDATE decks
+				SET
+					title = ${title},
+					enable_srs = ${Boolean(body.enable_srs)}
+				WHERE id::text = ${id}
+				  AND user_id::text = ${String(locals.user.id)}
+				  AND deleted_at IS NULL
+				RETURNING *
+			`;
+		} else {
+			result = await sql`
+				UPDATE decks
+				SET
+					title = ${title}
+				WHERE id::text = ${id}
+				  AND user_id::text = ${String(locals.user.id)}
+				  AND deleted_at IS NULL
+				RETURNING *
+			`;
+		}
 
 		if (result.length === 0) {
 			return json({ error: 'Deck not found' }, { status: 404 });

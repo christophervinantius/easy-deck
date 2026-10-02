@@ -117,7 +117,14 @@
 							{#each paginatedDecks as deck (deck.id)}
 								<tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
 									<td class="p-3 font-semibold text-black">
-										{deck.title}
+										<div class="flex items-center gap-2">
+											<span>{deck.title}</span>
+											{#if deck.enable_srs}
+												<span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-100 text-emerald-800 rounded-md">
+													SRS
+												</span>
+											{/if}
+										</div>
 									</td>
 									<td class="p-3 font-semibold text-black">
 										{deck.card_count ?? 0}
